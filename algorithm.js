@@ -90,6 +90,79 @@ function smooth(arr, sigma) {
   return out;
 }
 
+function sideBase(profile, i, dir, n) {
+  let minSoFar = profile[i];
+  let j = i + dir;
+  while (j >= 0 && j < n && profile[j] <= profile[i]) {
+    if (profile[j] < minSoFar) minSoFar = profile[j];
+    j += dir;
+  }
+  if (j < 0 || j >= n) return -Infinity;
+  return minSoFar;
+}
+
+function findPeaks(profile, opts) {
+  const o = opts || {};
+  const minDist = o.minPeakDistance === undefined ? ALGO.MIN_PEAK_DISTANCE : o.minPeakDistance;
+  const n = profile.length;
+  if (n < 3) return [];
+  let mean = 0;
+  for (const v of profile) mean += v;
+  mean /= n;
+  let varSum = 0;
+  for (const v of profile) varSum += (v - mean) * (v - mean);
+  const std = Math.sqrt(varSum / n);
+  let gmin = Infinity;
+  for (const v of profile) if (v < gmin) gmin = v;
+  const promMin = Math.max(
+    o.prominenceFloor === undefined ? ALGO.PROMINENCE_FLOOR : o.prominenceFloor,
+    (o.prominenceFraction === undefined ? ALGO.PROMINENCE_FRACTION : o.prominenceFraction) * std
+  );
+  const candidates = [];
+  for (let i = 1; i < n - 1; i++) {
+    if (profile[i] >= profile[i - 1] && profile[i] > profile[i + 1]) candidates.push(i);
+  }
+  const scored = [];
+  for (const i of candidates) {
+    const l = sideBase(profile, i, -1, n);
+    const r = sideBase(profile, i, 1, n);
+    let prom;
+    if (l === -Infinity && r === -Infinity) prom = profile[i] - gmin;
+    else if (l === -Infinity) prom = profile[i] - r;
+    else if (r === -Infinity) prom = profile[i] - l;
+    else prom = profile[i] - Math.max(l, r);
+    if (prom >= promMin) scored.push({ pos: i, prom });
+  }
+  scored.sort((a, b) => a.pos - b.pos);
+  const result = [];
+  for (const p of scored) {
+    const prev = result[result.length - 1];
+    if (prev && p.pos - prev.pos < minDist) {
+      if (p.prom > prev.prom) result[result.length - 1] = p;
+    } else {
+      result.push(p);
+    }
+  }
+  return result;
+}
+
+function autoCount(data, width, height, x1, y1, x2, y2) {
+  const raw = sampleProfile(data, width, height, x1, y1, x2, y2);
+  if (raw.length < 5) return { marks: [], raw };
+  const flat = detrend(raw);
+  let maxSum = 0;
+  let minSum = 0;
+  for (const v of flat) {
+    if (v > 0) maxSum += v;
+    if (v < 0) minSum += -v;
+  }
+  const oriented = minSum > maxSum ? flat.map(v => -v) : flat;
+  const clean = smooth(oriented);
+  const peaks = findPeaks(clean);
+  const denom = raw.length - 1;
+  return { marks: peaks.map(p => p.pos / denom), raw };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { ALGO, pixelGray, sampleProfile, movingAverage, detrend, smooth };
+  module.exports = { ALGO, pixelGray, sampleProfile, movingAverage, detrend, smooth, findPeaks, autoCount };
 }

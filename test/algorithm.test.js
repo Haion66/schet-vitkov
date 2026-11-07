@@ -67,3 +67,46 @@ test('smooth снижает одиночный выброс', () => {
   assert.ok(out[25] < 100);
   assert.equal(Math.max(...out), out[25]);
 });
+
+const { findPeaks, autoCount } = require('../algorithm.js');
+
+function bumpProfile(count, spacing, amplitude) {
+  const n = count * spacing + 40;
+  const p = new Array(n).fill(0);
+  for (let k = 0; k < count; k++) {
+    const c = 20 + k * spacing + spacing / 2;
+    for (let x = -6; x <= 6; x++) {
+      p[c + x] += amplitude * Math.exp(-(x * x) / 8);
+    }
+  }
+  return p;
+}
+
+test('findPeaks находит все витки на синтетическом профиле', () => {
+  const p = bumpProfile(12, 40, 40);
+  const peaks = findPeaks(p);
+  assert.equal(peaks.length, 12);
+  for (let k = 0; k < 12; k++) {
+    const expected = 20 + k * 40 + 20;
+    const found = peaks.some(pk => Math.abs(pk.pos - expected) <= 3);
+    assert.ok(found, 'виток ' + k + ' не найден около ' + expected);
+  }
+});
+
+test('findPeaks сливает близкие максимумы', () => {
+  const p = new Array(100).fill(0);
+  for (let x = -8; x <= 8; x++) {
+    if (50 + x >= 0 && 50 + x < 100) p[50 + x] = 30 * Math.exp(-(x * x) / 8);
+    if (53 + x >= 0 && 53 + x < 100) p[53 + x] += 30 * Math.exp(-(x * x) / 8);
+  }
+  const peaks = findPeaks(p);
+  assert.equal(peaks.length, 1);
+});
+
+test('autoCount возвращает доли вдоль линии и считает витки', () => {
+  const img = makeImage(400, 60, [200, 200, 200]);
+  for (let k = 0; k < 8; k++) drawVerticalStripe(img, 30 + k * 40, 6, 60);
+  const res = autoCount(img.data, img.width, img.height, 5, 30, 395, 30);
+  assert.equal(res.marks.length, 8);
+  for (const m of res.marks) assert.ok(m >= 0 && m <= 1);
+});
