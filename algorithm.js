@@ -41,6 +41,55 @@ function sampleProfile(data, width, height, x1, y1, x2, y2, bandHalfWidth) {
   return out;
 }
 
+function movingAverage(arr, window) {
+  const n = arr.length;
+  if (n === 0) return [];
+  const half = Math.max(1, Math.floor(window / 2));
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) {
+    let sum = 0;
+    let cnt = 0;
+    for (let j = Math.max(0, i - half); j <= Math.min(n - 1, i + half); j++) {
+      sum += arr[j];
+      cnt++;
+    }
+    out[i] = sum / cnt;
+  }
+  return out;
+}
+
+function detrend(profile) {
+  if (profile.length === 0) return [];
+  const window = Math.max(15, Math.floor(profile.length / ALGO.DETREND_DIVISOR));
+  const trend = movingAverage(profile, window);
+  return profile.map((v, i) => v - trend[i]);
+}
+
+function smooth(arr, sigma) {
+  const s = sigma === undefined ? ALGO.SMOOTH_SIGMA : sigma;
+  const n = arr.length;
+  if (n === 0) return [];
+  const radius = Math.max(1, Math.ceil(3 * s));
+  const kernel = new Array(2 * radius + 1);
+  let norm = 0;
+  for (let i = -radius; i <= radius; i++) {
+    const v = Math.exp(-(i * i) / (2 * s * s));
+    kernel[i + radius] = v;
+    norm += v;
+  }
+  for (let i = 0; i < kernel.length; i++) kernel[i] /= norm;
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) {
+    let acc = 0;
+    for (let k = -radius; k <= radius; k++) {
+      const j = Math.max(0, Math.min(n - 1, i + k));
+      acc += arr[j] * kernel[k + radius];
+    }
+    out[i] = acc;
+  }
+  return out;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { ALGO, pixelGray, sampleProfile };
+  module.exports = { ALGO, pixelGray, sampleProfile, movingAverage, detrend, smooth };
 }

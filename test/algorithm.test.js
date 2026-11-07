@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { pixelGray, sampleProfile } = require('../algorithm.js');
+const { detrend, smooth, movingAverage } = require('../algorithm.js');
 
 function makeImage(width, height, fill) {
   const data = new Uint8ClampedArray(width * height * 4);
@@ -44,4 +45,25 @@ test('sampleProfile видит тёмные полосы поперёк лини
   const p = sampleProfile(img.data, img.width, img.height, 10, 25, 190, 25, 0);
   const dark = p.filter(v => v < 150).length;
   assert.ok(dark >= 9, 'тёмных точек профиля: ' + dark);
+});
+
+test('detrend убирает линейный градиент освещения', () => {
+  const ramp = Array.from({ length: 300 }, (_, i) => i * 0.5);
+  const clean = detrend(ramp);
+  const middle = clean.slice(75, 225);
+  assert.ok(Math.max(...middle.map(Math.abs)) < 3, 'остаток в середине: ' + Math.max(...middle.map(Math.abs)));
+});
+
+test('smooth сохраняет постоянный сигнал', () => {
+  const flat = new Array(50).fill(37);
+  const out = smooth(flat, 1.5);
+  assert.ok(Math.abs(out[0] - 37) < 0.01 && Math.abs(out[25] - 37) < 0.01);
+});
+
+test('smooth снижает одиночный выброс', () => {
+  const arr = new Array(50).fill(0);
+  arr[25] = 100;
+  const out = smooth(arr, 1.5);
+  assert.ok(out[25] < 100);
+  assert.equal(Math.max(...out), out[25]);
 });
