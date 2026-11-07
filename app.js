@@ -10,7 +10,7 @@ const MARK_SCREEN_RADIUS = 7;
 const DOUBLE_TAP_MS = 300;
 const DOUBLE_TAP_DIST = 40;
 const ZOOM_STEP = 2.5;
-const ZOOM_MIN = 0.2;
+const ZOOM_MIN = 0.05;
 const ZOOM_MAX = 8;
 
 const cv = document.getElementById('cv');
@@ -161,6 +161,7 @@ async function loadPhoto(file) {
     bmp.close();
     state.imgCanvas = c;
     state.imgData = cctx.getImageData(0, 0, w, h);
+    clearTimeout(tapTimer);
     state.line = null;
     state.marks = [];
     state.adjust = 0;
@@ -186,6 +187,7 @@ function runAutoCount() {
 }
 
 let lastTap = { t: 0, x: 0, y: 0 };
+let tapTimer = null;
 
 function fitScale() {
   const dpr = window.devicePixelRatio || 1;
@@ -197,6 +199,8 @@ function fitScale() {
 function handleReviewTap(x, y) {
   const now = Date.now();
   if (now - lastTap.t < DOUBLE_TAP_MS && Math.hypot(x - lastTap.x, y - lastTap.y) < DOUBLE_TAP_DIST) {
+    clearTimeout(tapTimer);
+    tapTimer = null;
     lastTap = { t: 0, x: 0, y: 0 };
     if (state.view.scale > fitScale()) {
       fitView();
@@ -207,38 +211,41 @@ function handleReviewTap(x, y) {
     return;
   }
   lastTap = { t: now, x, y };
-  let best = -1;
-  let bestD = HIT_RADIUS;
-  for (let i = 0; i < state.marks.length; i++) {
-    const p = markPoint(state.marks[i]);
-    const s = imgToScreen(p.x, p.y);
-    const d = Math.hypot(s.x - x, s.y - y);
-    if (d < bestD) {
-      bestD = d;
-      best = i;
+  clearTimeout(tapTimer);
+  tapTimer = setTimeout(() => {
+    let best = -1;
+    let bestD = HIT_RADIUS;
+    for (let i = 0; i < state.marks.length; i++) {
+      const p = markPoint(state.marks[i]);
+      const s = imgToScreen(p.x, p.y);
+      const d = Math.hypot(s.x - x, s.y - y);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
     }
-  }
-  if (best >= 0) {
-    state.marks.splice(best, 1);
+    if (best >= 0) {
+      state.marks.splice(best, 1);
+      updateCounter();
+      redraw();
+      return;
+    }
+    const L = state.line;
+    const dx = L.x2 - L.x1;
+    const dy = L.y2 - L.y1;
+    const len2 = dx * dx + dy * dy;
+    if (len2 === 0) return;
+    const pt = screenToImg(x, y);
+    let t = ((pt.x - L.x1) * dx + (pt.y - L.y1) * dy) / len2;
+    const proj = imgToScreen(L.x1 + dx * t, L.y1 + dy * t);
+    if (Math.hypot(proj.x - x, proj.y - y) > LINE_TOLERANCE) return;
+    t = Math.max(0, Math.min(1, t));
+    if (state.marks.some(m => Math.abs(m - t) < 0.002)) return;
+    state.marks.push(t);
+    state.marks.sort((a, b) => a - b);
     updateCounter();
     redraw();
-    return;
-  }
-  const L = state.line;
-  const dx = L.x2 - L.x1;
-  const dy = L.y2 - L.y1;
-  const len2 = dx * dx + dy * dy;
-  if (len2 === 0) return;
-  const pt = screenToImg(x, y);
-  let t = ((pt.x - L.x1) * dx + (pt.y - L.y1) * dy) / len2;
-  const proj = imgToScreen(L.x1 + dx * t, L.y1 + dy * t);
-  if (Math.hypot(proj.x - x, proj.y - y) > LINE_TOLERANCE) return;
-  t = Math.max(0, Math.min(1, t));
-  if (state.marks.some(m => Math.abs(m - t) < 0.002)) return;
-  state.marks.push(t);
-  state.marks.sort((a, b) => a - b);
-  updateCounter();
-  redraw();
+  }, DOUBLE_TAP_MS);
 }
 
 cv.addEventListener('pointerdown', e => {
@@ -325,6 +332,7 @@ cv.addEventListener('pointercancel', e => {
 document.getElementById('btnCamera').addEventListener('click', () => camInput.click());
 document.getElementById('btnGallery').addEventListener('click', () => galInput.click());
 document.getElementById('btnOther').addEventListener('click', () => {
+  clearTimeout(tapTimer);
   state.imgCanvas = null;
   state.imgData = null;
   state.line = null;
@@ -336,6 +344,7 @@ document.getElementById('btnOther').addEventListener('click', () => {
   redraw();
 });
 document.getElementById('btnRedraw').addEventListener('click', () => {
+  clearTimeout(tapTimer);
   state.line = null;
   state.marks = [];
   state.adjust = 0;
