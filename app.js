@@ -370,6 +370,75 @@ galInput.addEventListener('change', () => {
   galInput.value = '';
 });
 
+function buildResultBlob() {
+  const src = state.imgCanvas;
+  const c = document.createElement('canvas');
+  c.width = src.width;
+  c.height = src.height;
+  const g = c.getContext('2d');
+  g.drawImage(src, 0, 0);
+  const r = Math.max(8, Math.round(Math.min(c.width, c.height) / 120));
+  const L = state.line;
+  g.strokeStyle = '#ffd400';
+  g.lineWidth = Math.max(3, Math.round(r / 3));
+  g.beginPath();
+  g.moveTo(L.x1, L.y1);
+  g.lineTo(L.x2, L.y2);
+  g.stroke();
+  for (const t of state.marks) {
+    const p = markPoint(t);
+    g.beginPath();
+    g.arc(p.x, p.y, r, 0, Math.PI * 2);
+    g.fillStyle = '#ff3b30';
+    g.fill();
+    g.lineWidth = Math.max(2, Math.round(r / 4));
+    g.strokeStyle = '#ffffff';
+    g.stroke();
+  }
+  const n = totalWires();
+  const fs = Math.max(40, Math.round(Math.min(c.width, c.height) / 14));
+  const now = new Date();
+  const pad = v => String(v).padStart(2, '0');
+  const dateStr = `${pad(now.getDate())}.${pad(now.getMonth() + 1)}.${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const label = `${n} ${plural(n)}   ${dateStr}`;
+  g.font = `bold ${fs}px sans-serif`;
+  const tw = g.measureText(label).width;
+  const bh = Math.round(fs * 1.6);
+  g.fillStyle = 'rgba(0,0,0,0.65)';
+  g.fillRect(0, c.height - bh, tw + fs, bh);
+  g.fillStyle = '#ffffff';
+  g.textBaseline = 'middle';
+  g.fillText(label, fs / 2, c.height - bh / 2);
+  return new Promise(resolve => c.toBlob(resolve, 'image/jpeg', 0.92));
+}
+
+async function saveResult() {
+  clearTimeout(tapTimer);
+  tapTimer = null;
+  try {
+    const blob = await buildResultBlob();
+    const now = new Date();
+    const pad = v => String(v).padStart(2, '0');
+    const name = `vitki-${totalWires()}-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}.jpg`;
+    const file = new File([blob], name, { type: 'image/jpeg' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Счёт витков' });
+      showToast('Отправьте в галерею через меню «Сохранить» или в мессенджер');
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      showToast('Файл сохранён в загрузки');
+    }
+  } catch (err) {
+    if (err && err.name !== 'AbortError') showToast('Не удалось сохранить: ' + err.message);
+  }
+}
+
+document.getElementById('btnSave').addEventListener('click', () => saveResult());
+
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 setMode('empty');
