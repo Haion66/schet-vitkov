@@ -443,3 +443,7 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 setMode('empty');
 updateCounter();
+
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js');
+}
