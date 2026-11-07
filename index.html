@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#1b4d8f">
+<title>Счёт витков</title>
+<style>
+html, body { margin: 0; height: 100%; background: #141414; color: #fff; font-family: system-ui, sans-serif; overflow: hidden; }
+#app { display: flex; flex-direction: column; height: 100%; }
+header { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: #1b4d8f; }
+#counter { font-size: 28px; font-weight: 700; min-width: 110px; white-space: nowrap; }
+#hint { font-size: 14px; opacity: 0.9; }
+main { flex: 1 1 auto; position: relative; }
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+#emptyState { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+#emptyState button { padding: 18px 26px; font-size: 18px; border-radius: 12px; border: none; background: #1b4d8f; color: #fff; }
+footer { flex: 0 0 auto; display: flex; gap: 8px; padding: 10px; background: #202124; overflow-x: auto; }
+footer button { flex: 1 0 auto; min-height: 52px; min-width: 90px; font-size: 16px; border-radius: 10px; border: none; background: #3a3a3d; color: #fff; padding: 8px 12px; }
+footer button.primary { background: #1b8f4d; font-weight: 700; }
+body:not([data-mode="empty"]) .only-empty { display: none; }
+body[data-mode="empty"] .not-empty { display: none; }
+body:not([data-mode="review"]) .only-review { display: none; }
+#toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 15px; max-width: 90vw; }
+</style>
+</head>
+<body data-mode="empty">
+<div id="app">
+<header><div id="counter">—</div><div id="hint">Загрузите фото обмотки</div></header>
+<main>
+<canvas id="cv"></canvas>
+<div id="emptyState">
+<button id="btnCamera">Сделать фото</button>
+<button id="btnGallery">Выбрать из галереи</button>
+</div>
+</main>
+<footer id="toolbar">
+<button id="btnRedraw" class="only-review">Заново</button>
+<button id="btnMinus" class="only-review">−1</button>
+<button id="btnPlus" class="only-review">+1</button>
+<button id="btnSave" class="only-review primary">Сохранить</button>
+<button id="btnOther" class="not-empty">Другое фото</button>
+</footer>
+</div>
+<input type="file" id="camInput" accept="image/*" capture="environment" hidden>
+<input type="file" id="galInput" accept="image/*" hidden>
+<div id="toast" hidden></div>
+<script src="algorithm.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
