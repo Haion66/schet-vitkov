@@ -7,6 +7,11 @@ const MIN_LINE_SCREEN = 30;
 const TAP_MAX_MOVE = 8;
 const TAP_MAX_MS = 400;
 const MARK_SCREEN_RADIUS = 7;
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_DIST = 40;
+const ZOOM_STEP = 2.5;
+const ZOOM_MIN = 0.2;
+const ZOOM_MAX = 8;
 
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
@@ -45,6 +50,15 @@ function screenToImg(x, y) {
 
 function imgToScreen(x, y) {
   return { x: x * state.view.scale + state.view.ox, y: y * state.view.scale + state.view.oy };
+}
+
+function zoomAt(x, y, factor) {
+  const ns = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, state.view.scale * factor));
+  const k = ns / state.view.scale;
+  state.view.ox = x - (x - state.view.ox) * k;
+  state.view.oy = y - (y - state.view.oy) * k;
+  state.view.scale = ns;
+  redraw();
 }
 
 function fitView() {
@@ -171,7 +185,28 @@ function runAutoCount() {
   redraw();
 }
 
+let lastTap = { t: 0, x: 0, y: 0 };
+
+function fitScale() {
+  const dpr = window.devicePixelRatio || 1;
+  const cw = cv.width / dpr;
+  const ch = cv.height / dpr;
+  return Math.min(cw / state.imgCanvas.width, ch / state.imgCanvas.height) * 0.98;
+}
+
 function handleReviewTap(x, y) {
+  const now = Date.now();
+  if (now - lastTap.t < DOUBLE_TAP_MS && Math.hypot(x - lastTap.x, y - lastTap.y) < DOUBLE_TAP_DIST) {
+    lastTap = { t: 0, x: 0, y: 0 };
+    if (state.view.scale > fitScale()) {
+      fitView();
+    } else {
+      zoomAt(x, y, ZOOM_STEP);
+    }
+    redraw();
+    return;
+  }
+  lastTap = { t: now, x, y };
   let best = -1;
   let bestD = HIT_RADIUS;
   for (let i = 0; i < state.marks.length; i++) {
@@ -209,7 +244,22 @@ function handleReviewTap(x, y) {
 cv.addEventListener('pointerdown', e => {
   cv.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY, sx: e.offsetX, sy: e.offsetY, t: Date.now() });
+  if (pointers.size === 2) {
+    pinchHappened = true;
+    const arr = [...pointers.values()];
+    pinch = {
+      d: Math.hypot(arr[1].x - arr[0].x, arr[1].y - arr[0].y),
+      scale: state.view.scale,
+      ox: state.view.ox,
+      oy: state.view.oy,
+      cx: (arr[0].x + arr[1].x) / 2,
+      cy: (arr[0].y + arr[1].y) / 2,
+    };
+  }
 });
+
+let pinch = null;
+let pinchHappened = false;
 
 cv.addEventListener('pointermove', e => {
   const p = pointers.get(e.pointerId);
@@ -218,6 +268,18 @@ cv.addEventListener('pointermove', e => {
   const prevY = p.y;
   p.x = e.offsetX;
   p.y = e.offsetY;
+  if (pointers.size === 2 && pinch) {
+    const arr = [...pointers.values()];
+    const d = Math.hypot(arr[1].x - arr[0].x, arr[1].y - arr[0].y);
+    const cx = (arr[0].x + arr[1].x) / 2;
+    const cy = (arr[0].y + arr[1].y) / 2;
+    const ns = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, pinch.scale * (d / pinch.d)));
+    state.view.scale = ns;
+    state.view.ox = cx - (pinch.cx - pinch.ox) * (ns / pinch.scale);
+    state.view.oy = cy - (pinch.cy - pinch.oy) * (ns / pinch.scale);
+    redraw();
+    return;
+  }
   if (pointers.size === 1 && state.mode === 'draw' && !state.line) {
     const a = screenToImg(p.sx, p.sy);
     const b = screenToImg(p.x, p.y);
@@ -233,6 +295,7 @@ cv.addEventListener('pointermove', e => {
 cv.addEventListener('pointerup', e => {
   const p = pointers.get(e.pointerId);
   pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
   if (!p) return;
   const moved = Math.hypot(e.offsetX - p.sx, e.offsetY - p.sy);
   if (state.mode === 'draw' && !state.line && state.draft && pointers.size === 0) {
@@ -247,9 +310,10 @@ cv.addEventListener('pointerup', e => {
     }
     return;
   }
-  if (state.mode === 'review' && pointers.size === 0 && moved < TAP_MAX_MOVE && Date.now() - p.t < TAP_MAX_MS) {
+  if (state.mode === 'review' && pointers.size === 0 && !pinchHappened && moved < TAP_MAX_MOVE && Date.now() - p.t < TAP_MAX_MS) {
     handleReviewTap(e.offsetX, e.offsetY);
   }
+  if (pointers.size === 0) pinchHappened = false;
 });
 
 cv.addEventListener('pointercancel', e => {
